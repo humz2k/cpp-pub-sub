@@ -40,10 +40,13 @@
 #include <mutex>
 #include <optional>
 #include <queue>
+#include <signal.h>
 #include <thread>
 #include <unordered_map>
 #include <variant>
 #include <vector>
+
+#define PUBSUB_ALIGNAS(...) alignas(__VA_ARGS__)
 
 /**
  * ---------------------------------------------------------------------------
@@ -255,8 +258,8 @@ template <typename... MessageTypes> class MessageContainer {
     TopicType* m_topic_string{nullptr};   ///< Topic string (if any).
     TopicType m_empty_topic_string;       ///< Fallback when not set.
     logging::Logger m_logger;
-    alignas(cache_line_size) std::atomic<int64_t> m_ref_cnt{
-        0}; ///< Intrusive counter.
+    PUBSUB_ALIGNAS(cache_line_size)
+    std::atomic<int64_t> m_ref_cnt{0}; ///< Intrusive counter.
 
   public:
     MessageContainer(Pool* pool)
@@ -479,19 +482,6 @@ template <typename config> class MessageQueue {
   public:
     MessageQueue() : m_logger(logging::create_logger("message-queue")) {}
 
-    ~MessageQueue() {
-        // Return *all* messages back to the pool.
-        RawMessage* msg = nullptr;
-        while (m_fast_queue.pop(msg)) {
-            msg->decref();
-        }
-        while (m_slow_queue.size() > 0) {
-            msg = m_slow_queue.front();
-            m_slow_queue.pop();
-            msg->decref();
-        }
-    }
-
     /** @brief Non‑blocking push usable from *any* thread. */
     void push(Message msg) {
         RawMessage* raw_msg = msg.get();
@@ -509,9 +499,11 @@ template <typename config> class MessageQueue {
 
         RawMessage* msg = nullptr;
         if (m_fast_queue.pop(msg)) {
-            auto out = Message(msg); // Acquire consumer reference.
-            msg->decref();           // Drop queue’s own reference
-            return std::move(out);
+            if (msg) {
+                auto out = Message(msg); // Acquire consumer reference.
+                msg->decref();           // Drop queue’s own reference
+                return std::move(out);
+            }
         }
 
         return std::nullopt;
@@ -532,10 +524,10 @@ template <typename config> class MessageQueue {
 template <typename T> class LockFreeVector {
   private:
     std::vector<T> m_data;
-    alignas(cache_line_size) std::atomic<size_t> m_next_index{
-        0}; ///< Index of next free slot.
-    alignas(cache_line_size) std::atomic<size_t> m_size{
-        0}; ///< Number of *initialized* slots.
+    PUBSUB_ALIGNAS(cache_line_size)
+    std::atomic<size_t> m_next_index{0}; ///< Index of next free slot.
+    PUBSUB_ALIGNAS(cache_line_size)
+    std::atomic<size_t> m_size{0}; ///< Number of *initialized* slots.
 
     size_t get_free_index() {
         size_t index = m_next_index.fetch_add(1, std::memory_order_acq_rel);
@@ -853,5 +845,19 @@ class PublisherSubscriber : public PublisherSubscriberBase {
         });
     }
 };
+
+namespace interrupts {
+inline volatile sig_atomic_t should_run = 1;
+inline void sigint_handler(int signal) { should_run = 0; }
+inline void setup() { signal(SIGINT, sigint_handler); }
+} // namespace interrupts
+
+template <typename F> inline void run_forever(F&& lambda) {
+    interrupts::setup();
+    while (interrupts::should_run) {
+        lambda();
+        volatile int x = 0; // to not optimize out this loop
+    }
+}
 
 } // namespace pubsub
