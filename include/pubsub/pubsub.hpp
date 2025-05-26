@@ -262,7 +262,7 @@ template <typename... MessageTypes> class MessageContainer {
     std::atomic<int64_t> m_ref_cnt{0}; ///< Intrusive counter.
 
   public:
-    MessageContainer(Pool* pool)
+    explicit MessageContainer(Pool* pool)
         : m_pool(pool), m_logger(logging::create_logger("message-container")) {}
 
     // -------------------------------------------------------------------
@@ -303,7 +303,7 @@ template <typename... MessageTypes> class MessageContainer {
          * @param initial_size     Number of MessageContainers pre‑allocated.
          * @param free_queue_size  Capacity of the lock‑free free list.
          */
-        Pool(size_t initial_size = 1024, size_t free_queue_size = 2048)
+        explicit Pool(size_t initial_size = 1024, size_t free_queue_size = 2048)
             : m_free_queue_size(free_queue_size),
               m_free_queue(m_free_queue_size) {
             m_messages.reserve(initial_size);
@@ -551,7 +551,7 @@ template <typename T> class LockFreeVector {
     }
 
   public:
-    LockFreeVector(size_t max_size) : m_data(max_size) {}
+    explicit LockFreeVector(size_t max_size) : m_data(max_size) {}
 
     // append
     size_t push_back(const T& value) {
