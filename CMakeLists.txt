@@ -12,6 +12,7 @@ include(FetchContent)
 
 option(PUBSUB_USE_QUILL "Use Quill for logging" ON)
 option(PUBSUB_BUILD_BENCHMARKS "Build benchmarks" ON)
+option(PUBSUB_BUILD_TESTS "Build tests" ON)
 
 if (PUBSUB_USE_QUILL)
     message(STATUS "Using Quill for logging")
@@ -59,5 +60,26 @@ foreach( sourcefile ${PERF_SOURCES} )
     add_executable( ${name} ${sourcefile} )
     target_link_libraries( ${name} ${PROJECT_NAME} benchmark::benchmark benchmark::benchmark_main )
 endforeach( sourcefile ${PERF_SOURCES} )
+endif()
+
+if (PUBSUB_BUILD_TESTS)
+set(BENCHMARK_ENABLE_TESTING OFF)
+FetchContent_Declare(
+    googletest
+    GIT_REPOSITORY https://github.com/google/googletest.git
+    GIT_TAG        v1.17.0
+)
+FetchContent_MakeAvailable(googletest)
+
+include(GoogleTest)
+
+enable_testing()
+file( GLOB TEST_SOURCES tests/*.cpp )
+foreach( sourcefile ${TEST_SOURCES} )
+    get_filename_component( name ${sourcefile} NAME_WE )
+    add_executable( ${name} ${sourcefile} )
+    target_link_libraries( ${name} ${PROJECT_NAME} GTest::gtest_main )
+    gtest_discover_tests(${name})
+endforeach( sourcefile ${TEST_SOURCES} )
 endif()
 endif()
