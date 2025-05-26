@@ -1,5 +1,5 @@
 # cpp-pub-sub
-> **Simple intra-process messaging for games, trading engines and real-time dashboards.**
+> **Simple intra-process messaging.**
 
 ---
 
